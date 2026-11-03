@@ -155,6 +155,7 @@ const ICON = {
   personas: '<circle cx="9" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2.5 20c.6-3.6 3.3-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 4.8a3.3 3.3 0 0 1 0 6.4M18.5 14.8c1.7.7 2.8 2.4 3 5.2" fill="none" stroke="currentColor" stroke-width="1.8"/>',
   red: '<circle cx="12" cy="5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="5" cy="19" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="19" cy="19" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5v4M12 11.5 6.2 17M12 11.5l5.8 5.5" fill="none" stroke="currentColor" stroke-width="1.8"/>',
   mapa: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+  analisis: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   equipo: '<path d="M4 20v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" fill="none" stroke="currentColor" stroke-width="1.8"/>',
   ajustes: '<circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" fill="none" stroke="currentColor" stroke-width="1.5"/>'
 };
@@ -164,12 +165,12 @@ function tabsDeRol() {
   if (CAPTURA.includes(r)) t.push('registrar');
   if (r !== 'consulta') t.push('personas');
   if (CAPTURA.includes(r)) t.push('red');
-  t.push('mapa');
+  t.push(['admin', 'coordinador', 'enlace', 'consulta'].includes(r) ? 'analisis' : 'mapa');
   if (GESTIONA.includes(r)) t.push('equipo');
   t.push('ajustes');
   return t;
 }
-const NOMBRE_TAB = {inicio: 'Inicio', registrar: 'Registrar', personas: 'Personas', red: 'Red', mapa: 'Mapa', equipo: 'Equipo', ajustes: 'Más'};
+const NOMBRE_TAB = {inicio: 'Inicio', registrar: 'Registrar', personas: 'Personas', red: 'Red', mapa: 'Mapa', analisis: 'Análisis', equipo: 'Equipo', ajustes: 'Más'};
 function armarShell() {
   const tabs = tabsDeRol();
   render(`<div class="shell">
@@ -177,7 +178,7 @@ function armarShell() {
       <div class="t"><small>${esc(ROLES[S.c.rol])}</small><b>${esc(S.camp.nombre || S.c.nombre)}</b></div>
       <div id="sync" class="sync"></div>
     </header>
-    <nav class="tabs" style="--n:${tabs.length}">${tabs.map(t => `<a href="#${t}" data-v="${t}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[t]}</svg>${NOMBRE_TAB[t]}</a>`).join('')}</nav>
+    <nav class="tabs" style="--n:${tabs.length}">${tabs.map(t => `<a href="${t === 'analisis' ? 'analisis.html' : '#' + t}" data-v="${t}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[t]}</svg>${NOMBRE_TAB[t]}</a>`).join('')}</nav>
     <main id="main"></main>
   </div>`);
   pintarSync();

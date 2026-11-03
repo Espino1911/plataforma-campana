@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Análisis electoral</title>
+<meta name="description" content="Resultados electorales por sección de Veracruz: Presidencia, Gubernatura, Diputaciones 2024 y Ayuntamientos 2025.">
+<meta name="theme-color" content="#0d5c6b">
+<meta name="robots" content="noindex,nofollow">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Campaña">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preload" href="data/geo.json" as="fetch" crossorigin>
+<style>
+@font-face{font-family:"IBM Plex Sans Condensed";font-weight:400;font-display:swap;src:url(fonts/plex-cond-400.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Sans Condensed";font-weight:500;font-display:swap;src:url(fonts/plex-cond-500.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Sans Condensed";font-weight:600;font-display:swap;src:url(fonts/plex-cond-600.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Sans Condensed";font-weight:700;font-display:swap;src:url(fonts/plex-cond-700.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-weight:400;font-display:swap;src:url(fonts/plex-mono-400.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-weight:500;font-display:swap;src:url(fonts/plex-mono-500.woff2) format("woff2")}
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;-webkit-text-size-adjust:100%}
+[hidden]{display:none!important}
+.offline{flex:0 0 auto;white-space:nowrap;background:var(--warn);color:#fff;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.updbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:30;display:flex;gap:10px;align-items:center;background:var(--fg);color:var(--bg);padding:8px 8px 8px 14px;border-radius:10px;font-size:13.5px;box-shadow:var(--shadow)}
+.updbar button{background:var(--accent);color:var(--accent-ink);border:0;border-radius:7px;padding:6px 10px;font-weight:700;cursor:pointer}
+</style>
+<style>
+/* Layout: mapa a pantalla completa; filtros arriba; panel de análisis abajo en celular y a la derecha en escritorio. */
+:root{
+  --bg:#eef1f3; --surface:#ffffff; --surface-2:#f5f7f8; --line:#d5dbdf; --fg:#13202a; --muted:#5b6b76;
+  --accent:#0d5c6b; --accent-ink:#ffffff; --map-bg:#e3e8eb; --map-edge:#ffffff; --map-none:#cfd6db;
+  --good:#1e7a46; --warn:#b26b00; --bad:#b3261e;
+  --f-ui:"IBM Plex Sans Condensed","Roboto Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:10px; --shadow:0 8px 28px rgba(15,30,40,.16);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1215; --surface:#151c21; --surface-2:#1b242a; --line:#2a363e; --fg:#e4eaee; --muted:#93a3ad;
+  --accent:#5cc3d4; --accent-ink:#06262c; --map-bg:#0b1013; --map-edge:#0b1013; --map-none:#26313a;
+  --good:#5ec58a; --warn:#e5a54a; --bad:#f2817a; --shadow:0 8px 28px rgba(0,0,0,.5); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1215; --surface:#151c21; --surface-2:#1b242a; --line:#2a363e; --fg:#e4eaee; --muted:#93a3ad;
+  --accent:#5cc3d4; --accent-ink:#06262c; --map-bg:#0b1013; --map-edge:#0b1013; --map-none:#26313a;
+  --good:#5ec58a; --warn:#e5a54a; --bad:#f2817a; --shadow:0 8px 28px rgba(0,0,0,.5); color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-ui);font-size:15px;overflow:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{position:relative;height:100%;display:grid;grid-template-rows:auto 1fr;grid-template-columns:minmax(0,1fr);overflow:hidden}
+header.bar{z-index:5;background:var(--surface);border-bottom:1px solid var(--line);
+  padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:8px;min-width:0}
+.brand{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.brand{min-width:0}.back{font-size:26px;line-height:1;text-decoration:none;color:var(--accent);padding:0 6px 0 0;font-weight:600}
+.brand h1{margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:17px;font-weight:700;letter-spacing:.01em}
+.brand h1 small{font-weight:500;color:var(--muted);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-left:6px}
+.search{display:flex;gap:6px}
+.search input{width:96px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.filters{display:flex;gap:6px;overflow-x:auto;min-width:0;scrollbar-width:none;padding-bottom:2px}
+.filters::-webkit-scrollbar{display:none}
+.f{display:flex;flex-direction:column;gap:2px;flex:0 0 auto}
+.f label{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.f select{padding:6px 26px 6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);max-width:220px;
+  appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 13px) 55%,calc(100% - 8px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+
+.stage{position:relative;min-height:0;display:grid;grid-template-columns:1fr}
+#map{position:absolute;inset:0;background:var(--map-bg);z-index:0;isolation:isolate}
+.legend{position:absolute;left:max(12px,env(safe-area-inset-left,0px));top:12px;z-index:3;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r);padding:8px 10px;box-shadow:var(--shadow);max-width:min(260px,60vw);font-size:12.5px}
+.legend b{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600}
+.legend .row{display:flex;align-items:center;gap:6px;margin:3px 0}
+.sw{width:14px;height:14px;border-radius:3px;flex:0 0 14px;border:1px solid rgba(0,0,0,.08)}
+.ramp{height:10px;border-radius:3px;margin:4px 0 2px}
+.ramp-l{display:flex;justify-content:space-between;color:var(--muted)}
+.loading{position:absolute;inset:0;display:grid;place-items:center;z-index:4;color:var(--muted);background:var(--map-bg)}
+
+/* Panel */
+.panel{position:absolute;z-index:4;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column;min-height:0}
+@media (max-width:899px){
+  .brand h1 small{display:none}
+  .kpi strong{font-size:14.5px}
+  .kpi{padding:7px 8px}
+  .bar-r{grid-template-columns:58px 1fr 118px;font-size:13px}
+  .bar-v{font-size:12px}
+  .panel{left:0;right:0;bottom:0;border-radius:16px 16px 0 0;height:46%;transition:height .25s ease;
+    padding-bottom:env(safe-area-inset-bottom,0px)}
+  .panel.min{height:118px}.panel.max{height:88%}
+}
+@media (min-width:900px){
+  .panel{top:12px;right:max(12px,env(safe-area-inset-right,0px));bottom:12px;width:420px;border-radius:14px;border:1px solid var(--line)}
+  .grab{display:none!important}
+}
+@media (prefers-reduced-motion:reduce){.panel{transition:none}}
+.grab{display:flex;justify-content:center;padding:8px 0 2px;cursor:pointer;background:none;border:0;width:100%}
+.grab span{width:42px;height:5px;border-radius:4px;background:var(--line)}
+.ph{padding:6px 16px 0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.ph .kicker{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.ph h2{margin:2px 0 8px;font-size:20px;line-height:1.15;text-wrap:balance}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding:0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs button{background:none;border:0;padding:9px 10px;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;white-space:nowrap;cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.pb{overflow:auto;min-height:0;flex:1;padding:12px 16px 20px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.kpi{background:var(--surface-2);border-radius:8px;padding:8px 10px;min-width:0}
+.kpi small{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.kpi strong{display:block;font-size:17px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+h3{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px;font-weight:600}
+.bars{display:flex;flex-direction:column;gap:7px}
+.bar-r{display:grid;grid-template-columns:62px 1fr 128px;gap:8px;align-items:center;font-size:13.5px}
+.bar-t{height:14px;background:var(--surface-2);border-radius:3px;overflow:hidden}
+.bar-t i{display:block;height:100%}
+.bar-v{text-align:right}
+.verdict{border-left:4px solid var(--accent);background:var(--surface-2);padding:10px 12px;border-radius:0 8px 8px 0;font-size:14px;line-height:1.4}
+.verdict strong{font-weight:700}
+.strat{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.sc{border:1px solid var(--line);border-radius:8px;padding:9px 10px;cursor:pointer;background:var(--surface);text-align:left}
+.sc[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.sc .t{display:flex;align-items:center;gap:6px;font-weight:700}
+.sc p{margin:4px 0 0;font-size:12.5px;color:var(--muted);line-height:1.35}
+.sc .n{margin-top:6px;font-size:13px}
+.note{font-size:12.5px;color:var(--muted);line-height:1.45}
+.tbl-wrap{overflow-x:auto;margin:0 -4px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 5px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child,th.l,td.l{text-align:left}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);cursor:pointer;user-select:none;position:sticky;top:0;background:var(--surface)}
+th[aria-sort]::after{content:" ▾";color:var(--accent)} th[aria-sort="ascending"]::after{content:" ▴"}
+tbody tr{cursor:pointer} tbody tr:hover{background:var(--surface-2)}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:1px 7px;border-radius:999px;font-size:11.5px;font-weight:600;border:1px solid var(--line)}
+.pill i{width:8px;height:8px;border-radius:50%}
+.row-btns{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.btn{border:1px solid var(--line);background:var(--surface-2);padding:7px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.ctl{display:flex;align-items:center;gap:10px;margin:8px 0}
+.ctl input[type=range]{flex:1;accent-color:var(--accent)}
+.hist td,.hist th{font-size:12.5px}
+.warn{color:var(--warn)}
+.empty{color:var(--muted);padding:20px 0;text-align:center}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);
+  padding:8px 14px;border-radius:8px;z-index:20;font-size:13.5px}
+/* MapLibre: estilos mínimos necesarios */
+.leaflet-container{background:var(--map-bg);font:inherit;-webkit-tap-highlight-color:transparent;outline:0}
+.leaflet-interactive{cursor:pointer}
+.zoomctl{position:absolute;z-index:3;display:flex;flex-direction:column;gap:6px;right:max(12px,env(safe-area-inset-right,0px));top:12px}
+@media (min-width:900px){.zoomctl{right:450px}}
+.zoomctl button{width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);font-size:18px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <a href="./#inicio" class="back" aria-label="Volver a la plataforma">‹</a><h1>Análisis <small id="campName">PREP 2024–2025</small></h1>
+      <form class="search" id="searchForm" autocomplete="off">
+        <input id="q" inputmode="numeric" placeholder="Sección" aria-label="Buscar sección por número">
+      </form>
+    </div>
+    <div class="filters">
+      <div class="f"><label for="selElec">Elección</label><select id="selElec"></select></div>
+      <div class="f"><label for="selFuerza">Fuerza</label><select id="selFuerza"></select></div>
+      <div class="f"><label for="selTipo">Ámbito</label><select id="selTipo">
+        <option value="est">Estado</option><option value="df">Distrito federal</option><option value="dl">Distrito local</option><option value="mun">Municipio</option></select></div>
+      <div class="f" id="fAmb" hidden><label for="selAmb">Cuál</label><select id="selAmb"></select></div>
+      <div class="f"><label for="selCapa">Capa</label><select id="selCapa">
+        <option value="win">Ganador</option><option value="pos">Posición</option><option value="pct">% de la fuerza</option>
+        <option value="mar">Margen</option><option value="part">Participación</option><option value="est">Estrategia</option>
+        <option value="pri">Prioridad</option><option value="estru">Avance de estructura</option><option value="swing">Cambio vs otra elección</option><option value="lnc">Crecimiento lista nominal</option></select></div>
+      <div class="f" id="fComp" hidden><label for="selComp">Comparar con</label><select id="selComp"></select></div>
+    </div>
+  </header>
+  <div class="stage">
+    <div id="map"></div>
+    <div class="loading" id="loading">Cargando 5,004 secciones…</div>
+    <div class="legend" id="legend"></div>
+    <div class="zoomctl"><button id="zin" aria-label="Acercar">+</button><button id="zout" aria-label="Alejar">−</button><button id="zfit" aria-label="Ver ámbito completo">⤢</button></div>
+    <section class="panel" id="panel" aria-label="Análisis">
+      <button class="grab" id="grab" aria-label="Expandir o contraer panel"><span></span></button>
+      <div class="ph"><div class="kicker" id="kicker"></div><h2 id="ptitle">Veracruz</h2></div>
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="res" aria-selected="true">Resumen</button>
+        <button role="tab" data-tab="estr" aria-selected="false">Estrategia</button>
+        <button role="tab" data-tab="rank" aria-selected="false">Secciones</button>
+        <button role="tab" data-tab="sec" aria-selected="false">Ficha</button>
+        <button role="tab" data-tab="met" aria-selected="false">Método</button>
+      </div>
+      <div class="pb" id="pbody"></div>
+    </section>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/topojson-client.min.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const fmt = n => n == null || isNaN(n) ? '—' : Math.round(n).toLocaleString('es-MX');
+const pct = (n, d = 1) => n == null || !isFinite(n) ? '—' : (n * 100).toFixed(d) + '%';
+const pts = (n, d = 1) => n == null || !isFinite(n) ? '—' : (n > 0 ? '+' : '') + (n * 100).toFixed(d);
+
+// ---------- Catálogo de fuerzas ----------
+const FUERZAS = {
+  SHH: {name: 'Sigamos Haciendo Historia', short: 'SHH', color: '#9b1b30', hint: 'MORENA-PT-PVEM'},
+  FCV: {name: 'Bloque PAN-PRI', short: 'PAN-PRI', color: '#1f5fae', hint: 'con PRD en 2024'},
+  MC: {name: 'Movimiento Ciudadano', short: 'MC', color: '#ef7d00'},
+  FXMV: {name: 'Fuerza por México', short: 'FXM', color: '#c2187a'},
+  IND: {name: 'Candidaturas independientes', short: 'Indep.', color: '#6d5a8c'},
+  MORENA: {name: 'MORENA', short: 'MORENA', color: '#9b1b30'}, PAN: {name: 'PAN', short: 'PAN', color: '#1f5fae'},
+  PRI: {name: 'PRI', short: 'PRI', color: '#0b8a43'}, PRD: {name: 'PRD', short: 'PRD', color: '#e0b100'},
+  PVEM: {name: 'PVEM', short: 'PVEM', color: '#5fae2e'}, PT: {name: 'PT', short: 'PT', color: '#d8261c'}
+};
+const STRAT = {
+  inv: {name: 'Prioridad de inversión', act: 'Invertir', color: '#4338ca', desc: 'Competida, de peso alto y con estructura por debajo de la mitad de su meta. Recursos aquí primero.'},
+  bas: {name: 'Bastión', act: 'Movilizar', color: '#1e7a46', desc: 'Gana con margen amplio. Asegurar participación del voto propio.'},
+  ref: {name: 'Ventaja corta', act: 'Reforzar', color: '#7fb069', desc: 'Gana por menos del umbral. Cuidar y ampliar la ventaja.'},
+  dis: {name: 'Desventaja corta', act: 'En disputa', color: '#e5a020', desc: 'Pierde por menos del umbral. Máxima rentabilidad de persuasión.'},
+  adv: {name: 'Adversa', act: 'Contener', color: '#b3261e', desc: 'Pierde por margen amplio. Presencia mínima, costo alto por voto.'}
+};
+
+let CAT, RES, GEO, LN26 = null, map, ready = false;
+const ln26Of = i => LN26 ? LN26.ln[i] ?? null : null;
+const S = {elec: 'GUB24', fuerza: 'SHH', tipo: 'est', amb: null, capa: 'win', comp: 'DL24', mode: 'bloque',
+  umbral: 0.10, tab: 'res', sel: null, sort: {k: 'pri', dir: -1}, rankLimit: 60, stratF: null};
+
+// ---------- Cálculo ----------
+// Índice de datos: las secciones hijas de un reseccionamiento usan la sección de origen (entrada virtual).
+const dataIdx = (i, e = S.elec) => RES[e].ln[i] != null ? i : (CAT.parent[i] ?? i);
+function options(e) { // fuerzas que compiten en modo actual
+  const E = RES[e];
+  return S.mode === 'bloque' ? Object.keys(E.blocks) : Object.keys(E.parties);
+}
+function votesOf(e, k, i) { const E = RES[e]; return (E.blocks[k] ?? E.parties[k])[i] ?? 0; }
+function secCalc(e, i, focus) { // i = índice de datos
+  const E = RES[e];
+  if (E.ln[i] == null) return null;
+  const ln = E.ln[i], total = E.total[i], valid = total - E.nulos[i] - E.nr[i];
+  const opts = options(e).map(k => ({k, v: votesOf(e, k, i)})).filter(o => o.k !== 'IND' || o.v > 0).sort((a, b) => b.v - a.v);
+  const f = opts.find(o => o.k === focus);
+  if (!f) return null;
+  const pos = opts.indexOf(f) + 1;
+  const rival = pos === 1 ? opts[1] : opts[0];
+  const share = valid > 0 ? f.v / valid : 0;
+  const mar = valid > 0 ? (f.v - rival.v) / valid : 0;
+  const strat = mar >= S.umbral ? 'bas' : mar >= 0 ? 'ref' : mar > -S.umbral ? 'dis' : 'adv';
+  return {ln, total, valid, opts, f: f.v, share, pos, rival, mar, strat, part: ln > 0 ? total / ln : 0,
+    abst: Math.max(0, ln - total), ln26: ln26Of(i), abst26: ln26Of(i) != null ? Math.max(0, ln26Of(i) - total) : Math.max(0, ln - total), deficit: Math.max(0, rival.v - f.v + 1), cover: E.esperadas[i] ? E.actas[i] / E.esperadas[i] : 1};
+}
+function inAmb(i) {
+  if (S.tipo === 'est' || S.amb == null) return true;
+  return CAT[S.tipo][i] === S.amb;
+}
+// Lista de índices de datos del ámbito (sin duplicar orígenes virtuales)
+function ambDataIdx() {
+  const out = [], seen = new Set(), N = CAT.sec.length;
+  for (let i = 0; i < N; i++) {
+    if (RES[S.elec].ln[i] == null) continue; // sin datos propios: los aporta su sección de origen
+    if (!inAmb(i)) continue;
+    if (!seen.has(i)) { seen.add(i); out.push(i); }
+  }
+  return out;
+}
+function ambCalc() {
+  const e = S.elec, E = RES[e], idx = ambDataIdx();
+  const keys = options(e); const tot = Object.fromEntries(keys.map(k => [k, 0]));
+  let ln = 0, total = 0, valid = 0, n = 0, actas = 0, esp = 0, ln26 = 0;
+  const rows = [];
+  for (const i of idx) {
+    const c = secCalc(e, i, S.fuerza); if (!c) continue;
+    n++; ln += c.ln; ln26 += c.ln26 ?? c.ln; total += c.total; valid += c.valid; actas += E.actas[i]; esp += E.esperadas[i];
+    for (const o of c.opts) tot[o.k] += o.v;
+    rows.push({i, c});
+  }
+  for (const r of rows) {
+    r.wLN = ln ? r.c.ln / ln : 0; r.wPart = total ? r.c.total / total : 0;
+    const comp = Math.max(0, 1 - Math.abs(r.c.mar) / S.umbral);
+    r.pri = r.wLN * comp * 100; // índice de prioridad
+    r.mob = (r.c.strat === 'bas' || r.c.strat === 'ref') ? r.c.abst26 * r.c.share : 0; // reserva de movilización sobre la lista nominal vigente
+  }
+  // Invertir: competida (ventaja o desventaja corta), en el tercio de mayor peso del ámbito y con estructura < 50% de su meta
+  const pesos = rows.map(r => r.wLN).sort((a, b) => a - b), thr = pesos.length ? pesos[Math.floor(pesos.length * 2 / 3)] : 1;
+  for (const r of rows) {
+    const es = estOf(r.i);
+    r.est = es; r.cob = es && es.meta ? es.registrados / es.meta : null;
+    r.strat2 = (es && (r.c.strat === 'dis' || r.c.strat === 'ref') && r.wLN >= thr && (r.cob ?? 0) < .5) ? 'inv' : r.c.strat;
+  }
+  const ranked = keys.map(k => ({k, v: tot[k]})).filter(o => o.k !== 'IND' || o.v > 0).sort((a, b) => b.v - a.v);
+  return {idx, rows, ln, ln26, total, valid, n, ranked, actas, esp};
+}
+
+// ---------- Color ----------
+function hex2rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function mix(a, b, t) { const A = hex2rgb(a), B = hex2rgb(b); return '#' + A.map((v, j) => Math.round(v + (B[j] - v) * t).toString(16).padStart(2, '0')).join(''); }
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function rampColor(c, t) { return mix(cssVar('--surface-2'), c, Math.max(0.08, Math.min(1, t))); }
+const DIV_NEG = '#b3261e', DIV_POS = '#1e7a46';
+function divColor(v, max) { const t = Math.max(-1, Math.min(1, v / max)); const base = cssVar('--surface-2'); return t >= 0 ? mix(base, DIV_POS, .12 + .88 * t) : mix(base, DIV_NEG, .12 + .88 * -t); }
+
+function colorFor(c, i, extra) {
+  if (!c) return null;
+  const fc = FUERZAS[S.fuerza].color;
+  switch (S.capa) {
+    case 'win': { const w = c.opts[0]; const m = c.valid ? (w.v - c.opts[1].v) / c.valid : 0; return mix(cssVar('--surface-2'), FUERZAS[w.k].color, .35 + .65 * Math.min(1, m / .4)); }
+    case 'pos': return c.pos === 1 ? fc : c.pos === 2 ? mix(cssVar('--surface-2'), fc, .45) : mix(cssVar('--surface-2'), '#7a8790', .35);
+    case 'pct': return rampColor(fc, (c.share - .1) / .6);
+    case 'mar': return divColor(c.mar, .4);
+    case 'part': return rampColor(cssVar('--accent'), (c.part - .35) / .45);
+    case 'est': return STRAT[extra || c.strat].color;
+    case 'estru': return extra == null ? null : extra >= 1 ? '#1e7a46' : extra >= .5 ? '#9cc27a' : extra >= .25 ? '#e5a020' : extra > 0 ? '#d9772b' : '#b3261e';
+    case 'pri': return extra == null ? null : rampColor(cssVar('--accent'), extra / extra_max);
+    case 'lnc': return c.ln26 == null || !c.ln ? null : divColor(c.ln26 / c.ln - 1, .25);
+    case 'swing': return extra == null ? null : divColor(extra, .2);
+  }
+}
+let extra_max = 1;
+
+// ---------- Mapa (Leaflet sobre canvas 2D: funciona sin WebGL) ----------
+const VER_BOX = [-98.7, 17.1, -93.6, 22.5];
+const MAP = {
+  layers: [], sel: null, distL: {}, munL: null, edoL: null, renderer: null, strokeOn: null,
+  init(sec, lines) {
+    this.renderer = L.canvas({padding: 0.4, tolerance: 2});
+    map = L.map('map', {zoomControl: false, attributionControl: false, renderer: this.renderer, preferCanvas: true,
+      zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90, minZoom: 6, maxZoom: 17, inertia: true, boxZoom: false});
+    const none = cssVar('--map-none'), edge = cssVar('--map-edge');
+    L.geoJSON(sec, {renderer: this.renderer, style: () => ({stroke: false, color: edge, weight: 0.6, fillColor: none, fillOpacity: 0.95}),
+      onEachFeature: (ft, layer) => { this.layers[ft.id] = layer; layer.on('click', () => selectSec(ft.id, false)); }}).addTo(map);
+    const byTag = t => ({type: 'FeatureCollection', features: lines.features.filter(f => f.properties.layer === t)});
+    this.munL = L.geoJSON(byTag('mun'), {renderer: this.renderer, interactive: false, style: {color: cssVar('--fg'), weight: 0.7, opacity: 0.35}}).addTo(map);
+    ['df', 'dl'].forEach(t => this.distL[t] = L.geoJSON(byTag(t), {renderer: this.renderer, interactive: false, style: {color: cssVar('--fg'), weight: 1.8, opacity: 0.75}}));
+    this.edoL = L.geoJSON(byTag('edo'), {renderer: this.renderer, interactive: false, style: {color: cssVar('--muted'), weight: 1}}).addTo(map);
+    map.on('zoomend', () => this.strokes());
+    this.fit(VER_BOX, null, false);
+    this.strokes();
+  },
+  // Con zoom bajo, el borde se pinta del mismo color que el relleno para cerrar las juntas entre polígonos.
+  edgeStyle(l) {
+    const o = l.options;
+    return this.strokeOn ? {stroke: true, color: cssVar('--map-edge'), weight: map.getZoom() >= 12 ? 0.9 : 0.5, opacity: 0.8}
+                         : {stroke: true, color: o.fillColor, weight: 0.8, opacity: o.fillOpacity};
+  },
+  strokes() {
+    const on = map.getZoom() >= 9.5;
+    if (on === this.strokeOn) return; this.strokeOn = on;
+    this.layers.forEach(l => l && l.setStyle(this.edgeStyle(l)));
+  },
+  fill(i, col, inside) { const l = this.layers[i]; if (!l) return; l.setStyle({fillColor: col, fillOpacity: inside ? 0.95 : 0.18}); l.setStyle(this.edgeStyle(l)); },
+  dist(tag) {
+    Object.entries(this.distL).forEach(([t, g]) => { if (t === tag) { if (!map.hasLayer(g)) g.addTo(map); g.bringToFront(); } else if (map.hasLayer(g)) map.removeLayer(g); });
+    this.edoL.bringToFront(); if (this.sel) this.sel.bringToFront();
+  },
+  select(group) {
+    if (this.sel) map.removeLayer(this.sel);
+    const fc = {type: 'FeatureCollection', features: group.map(i => this.layers[i] && this.layers[i].feature).filter(Boolean)};
+    this.sel = L.geoJSON(fc, {renderer: this.renderer, interactive: false, style: {color: cssVar('--accent'), weight: 3, fill: false}}).addTo(map);
+  },
+  fit(b, maxZoom, animate = true) {
+    const p = padding();
+    map.fitBounds([[b[1], b[0]], [b[3], b[2]]], {paddingTopLeft: [p.left, p.top], paddingBottomRight: [p.right, p.bottom], maxZoom: maxZoom || 17, animate});
+  },
+  theme() {
+    const fg = cssVar('--fg');
+    this.munL.setStyle({color: fg}); Object.values(this.distL).forEach(g => g.setStyle({color: fg}));
+    this.edoL.setStyle({color: cssVar('--muted')});
+    this.layers.forEach(l => l && l.setStyle(this.edgeStyle(l)));
+    if (this.sel) this.sel.setStyle({color: cssVar('--accent')});
+  }
+};
+function themeMapPaint() {
+  if (!ready) return;
+  MAP.theme();
+  paint();
+}
+function paint() {
+  if (!ready) return;
+  const e = S.elec, N = CAT.sec.length, A = ambCalc();
+  const priMap = new Map(), swMap = new Map();
+  if (S.capa === 'pri') { extra_max = Math.max(0.0001, ...A.rows.map(r => r.pri)); A.rows.forEach(r => priMap.set(r.i, r.pri)); }
+  if (S.capa === 'swing') A.rows.forEach(r => { const o = secCalc(S.comp, dataIdx(r.i, S.comp), S.fuerza); if (o) swMap.set(r.i, r.c.share - o.share); });
+  if (S.capa === 'est') A.rows.forEach(r => swMap.set(r.i, r.strat2));
+  const none = cssVar('--map-none');
+  for (let i = 0; i < CAT.nGeo; i++) {
+    const d = dataIdx(i), c = secCalc(e, d, S.fuerza);
+    const ex = S.capa === 'pri' ? priMap.get(d) : (S.capa === 'swing' || S.capa === 'est') ? swMap.get(d) : S.capa === 'estru' ? coberturaGeo(i) : null;
+    const col = colorFor(c, d, ex) || none;
+    MAP.fill(i, col, inAmb(i));
+  }
+  MAP.dist(S.tipo === 'dl' ? 'dl' : S.tipo === 'mun' ? null : 'df');
+  legend(A);
+}
+function fitAmb() {
+  if (!ready) return;
+  let b = null;
+  for (let i = 0; i < CAT.nGeo; i++) if (inAmb(i)) { const bb = CAT.bbox[i]; if (!bb) continue; b = b ? [Math.min(b[0], bb[0]), Math.min(b[1], bb[1]), Math.max(b[2], bb[2]), Math.max(b[3], bb[3])] : bb.slice(); }
+  if (b) MAP.fit(b);
+}
+function padding() {
+  const wide = innerWidth >= 900, p = $('#panel');
+  return wide ? {top: 30, bottom: 30, left: 30, right: 470} : {top: 30, left: 20, right: 20, bottom: Math.min(p.offsetHeight + 10, innerHeight * .5)};
+}
+
+// ---------- Leyenda ----------
+function legend(A) {
+  const L = $('#legend'), f = FUERZAS[S.fuerza];
+  const ramp = (c, a, b, t) => `<b>${t}</b><div class="ramp" style="background:linear-gradient(90deg,${rampColor(c, 0)},${rampColor(c, 1)})"></div><div class="ramp-l num"><span>${a}</span><span>${b}</span></div>`;
+  const div = (a, b, t) => `<b>${t}</b><div class="ramp" style="background:linear-gradient(90deg,${divColor(-1, 1)},${divColor(0, 1)},${divColor(1, 1)})"></div><div class="ramp-l num"><span>${a}</span><span>0</span><span>${b}</span></div>`;
+  let h = '';
+  switch (S.capa) {
+    case 'win': h = '<b>Ganador por sección</b>' + options(S.elec).map(k => `<div class="row"><span class="sw" style="background:${FUERZAS[k].color}"></span>${FUERZAS[k].name}</div>`).join('') + '<div class="note">Más intenso = mayor margen</div>'; break;
+    case 'pos': h = `<b>Lugar de ${f.short}</b><div class="row"><span class="sw" style="background:${f.color}"></span>1.º</div><div class="row"><span class="sw" style="background:${mix(cssVar('--surface-2'), f.color, .45)}"></span>2.º</div><div class="row"><span class="sw" style="background:${mix(cssVar('--surface-2'), '#7a8790', .35)}"></span>3.º o menor</div>`; break;
+    case 'pct': h = ramp(f.color, '≤10%', '≥70%', `% de ${f.short} (votación válida)`); break;
+    case 'mar': h = div('−40', '+40', `Margen de ${f.short} vs rival (pts)`); break;
+    case 'part': h = ramp(cssVar('--accent'), '≤35%', '≥80%', 'Participación'); break;
+    case 'estru': h = '<b>Estructura contra meta</b>' + [['#b3261e', 'Sin registros'], ['#d9772b', 'Menos de 25%'], ['#e5a020', '25% a 50%'], ['#9cc27a', '50% a 99%'], ['#1e7a46', 'Meta cumplida']].map(([c, t]) => `<div class="row"><span class="sw" style="background:${c}"></span>${t}</div>`).join('') + '<div class="note">Solo secciones de tu campaña</div>'; break;
+    case 'est': h = `<b>Estrategia para ${f.short}</b>` + Object.values(STRAT).map(s => `<div class="row"><span class="sw" style="background:${s.color}"></span>${s.act} · ${s.name.toLowerCase()}</div>`).join('') + `<div class="note">Umbral ±${Math.round(S.umbral * 100)} pts</div>`; break;
+    case 'pri': h = ramp(cssVar('--accent'), 'baja', 'alta', 'Índice de prioridad') + '<div class="note">Peso en lista nominal × cercanía al empate</div>'; break;
+    case 'lnc': h = div('−25%', '+25%', `Lista nominal ${LN26 ? fechaLN() : ''} vs ${RES[S.elec].short}`); break;
+    case 'swing': h = div('−20', '+20', `${f.short}: ${RES[S.elec].short} − ${RES[S.comp].short} (pts)`); break;
+  }
+  L.innerHTML = h;
+}
+
+// ---------- Panel ----------
+function ambLabel() {
+  if (S.tipo === 'est') return ['Estado', 'Veracruz'];
+  if (S.tipo === 'df') return ['Distrito federal ' + String(S.amb).padStart(2, '0'), CAT.dfName[S.amb] || ''];
+  if (S.tipo === 'dl') return ['Distrito local ' + String(S.amb).padStart(2, '0'), CAT.dlName[S.amb] || ''];
+  return ['Municipio', titleCase(CAT.munName[S.amb] || '')];
+}
+function fechaLN(full) { if (!LN26) return ''; const [y, m, d] = LN26.fecha.split('-'); const M = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']; return full ? `${+d} de ${M.at(+m - 1)} de ${y}` : `${M.at(+m - 1)} ${y.slice(2)}`; }
+const titleCase = s => s.toLowerCase().replace(/(^|\s)(\p{L})/gu, (m, a, b) => a + b.toUpperCase()).replace(/\b(De|Del|La|Las|Los|Y)\b/g, w => w.toLowerCase());
+function render() {
+  const [k, t] = ambLabel();
+  $('#kicker').textContent = k + ' · ' + RES[S.elec].name;
+  $('#ptitle').textContent = t;
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === S.tab));
+  const A = ambCalc();
+  const fn = {res: tabRes, estr: tabEstr, rank: tabRank, sec: tabSec, met: tabMet}[S.tab];
+  $('#pbody').innerHTML = fn(A);
+  bindPanel(A);
+}
+function bars(list, base) {
+  const max = list[0]?.v || 1;
+  return `<div class="bars">${list.map(o => `<div class="bar-r"><span>${FUERZAS[o.k].short}</span><div class="bar-t"><i style="width:${o.v / max * 100}%;background:${FUERZAS[o.k].color}"></i></div><span class="bar-v num">${pct(o.v / base)} · ${fmt(o.v)}</span></div>`).join('')}</div>`;
+}
+function tabRes(A) {
+  if (!A.n) return '<p class="empty">Sin datos para este ámbito.</p>';
+  const f = S.fuerza, F = FUERZAS[f];
+  const me = A.ranked.find(o => o.k === f), pos = A.ranked.indexOf(me) + 1, riv = pos === 1 ? A.ranked[1] : A.ranked[0];
+  const diff = me.v - riv.v;
+  const cnt = {inv: [0, 0], bas: [0, 0], ref: [0, 0], dis: [0, 0], adv: [0, 0]};
+  let mob = 0, disp = 0, eReg = 0, eMeta = 0;
+  A.rows.forEach(r => { cnt[r.strat2][0]++; cnt[r.strat2][1] += r.c.ln; mob += r.mob; if (r.c.strat === 'dis') disp += r.c.deficit; if (r.est) { eReg += r.est.registrados; eMeta += r.est.meta; } });
+  const verdict = diff > 0
+    ? `<strong>${F.name}</strong> gana el ámbito por <strong class="num">${fmt(diff)}</strong> votos (${pts(diff / A.valid)} pts) sobre ${FUERZAS[riv.k].short}.`
+    : `<strong>${F.name}</strong> queda en ${pos}.º lugar. Le faltan <strong class="num">${fmt(-diff + 1)}</strong> votos para superar a ${FUERZAS[riv.k].short}.`;
+  return `
+  <div class="kpis">
+    <div class="kpi"><small>Lista nominal</small><strong class="num">${fmt(A.ln)}</strong></div>
+    <div class="kpi"><small>Votación</small><strong class="num">${fmt(A.total)}</strong></div>
+    <div class="kpi"><small>Participación</small><strong class="num">${pct(A.total / A.ln)}</strong></div>
+  </div>
+  ${LN26 ? `<div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="kpi"><small>Lista nominal ${fechaLN()}</small><strong class="num">${fmt(A.ln26)}</strong></div><div class="kpi"><small>Cambio vs ${RES[S.elec].short}</small><strong class="num">${pts(A.ln26 / A.ln - 1)}%</strong></div></div>` : ''}
+  <div class="verdict">${verdict}</div>
+  ${eMeta ? `<div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px"><div class="kpi"><small>Estructura registrada</small><strong class="num">${fmt(eReg)}</strong></div><div class="kpi"><small>Avance contra meta</small><strong class="num">${pct(eReg / eMeta)}</strong></div></div>` : ''}
+  <h3>Resultado · % de votación válida</h3>${bars(A.ranked, A.valid)}
+  <h3>Mapa de esfuerzo para ${F.short}</h3>
+  <div class="tbl-wrap"><table><thead><tr><th class="l">Estrategia</th><th>Secciones</th><th>Lista nominal</th></tr></thead><tbody>
+  ${Object.entries(STRAT).map(([k, s]) => `<tr data-strat="${k}"><td class="l"><span class="pill"><i style="background:${s.color}"></i>${s.act}</span></td><td class="num">${cnt[k][0]}</td><td class="num">${fmt(cnt[k][1])}</td></tr>`).join('')}
+  </tbody></table></div>
+  <div class="kpis" style="margin-top:12px;grid-template-columns:repeat(2,minmax(0,1fr))">
+    <div class="kpi"><small>Votos en disputa</small><strong class="num">${fmt(disp)}</strong></div>
+    <div class="kpi"><small>Reserva movilizable</small><strong class="num">${fmt(mob)}</strong></div>
+  </div>
+  <p class="note">Votos en disputa: suma de lo que le falta a ${F.short} para ganar cada sección de desventaja corta. Reserva movilizable: electores de la lista nominal vigente que no votaron en sus secciones ganadas, multiplicados por su % actual.</p>
+  <p class="note">Secciones con datos: <span class="num">${A.n}</span> · Actas contabilizadas: <span class="num">${fmt(A.actas)} de ${fmt(A.esp)}</span> (${pct(A.actas / A.esp)}). ${RES[S.elec].note || ''}</p>`;
+}
+function tabEstr(A) {
+  if (!A.n) return '<p class="empty">Sin datos para este ámbito.</p>';
+  const F = FUERZAS[S.fuerza];
+  const g = {inv: [], bas: [], ref: [], dis: [], adv: []};
+  A.rows.forEach(r => g[r.strat2].push(r));
+  const sum = (a, f) => a.reduce((s, r) => s + f(r), 0);
+  const cards = Object.entries(STRAT).map(([k, s]) => {
+    const a = g[k];
+    const metric = k === 'inv' ? `Faltan en estructura: <span class="num">${fmt(sum(a, r => r.est ? Math.max(0, r.est.meta - r.est.registrados) : 0))}</span>` : k === 'bas' || k === 'ref' ? `Reserva: <span class="num">${fmt(sum(a, r => r.mob))}</span>` : k === 'dis' ? `Faltan: <span class="num">${fmt(sum(a, r => r.c.deficit))}</span>` : `LN: <span class="num">${fmt(sum(a, r => r.c.ln))}</span>`;
+    return `<button class="sc" data-sf="${k}" aria-pressed="${S.stratF === k}"><div class="t"><span class="sw" style="background:${s.color}"></span>${s.act}</div><p>${s.desc}</p><div class="n"><span class="num">${a.length}</span> secc. · ${metric}</div></button>`;
+  }).join('');
+  let list = A.rows.filter(r => !S.stratF || r.strat2 === S.stratF);
+  const order = S.stratF === 'inv' ? (a, b) => b.pri - a.pri : S.stratF === 'bas' || S.stratF === 'ref' ? (a, b) => b.mob - a.mob : S.stratF === 'adv' ? (a, b) => b.c.ln - a.c.ln : (a, b) => b.pri - a.pri;
+  list.sort(order); list = list.slice(0, 25);
+  const head = S.stratF === 'bas' || S.stratF === 'ref' ? 'Reserva' : 'Faltan';
+  const estCol = r => r.est ? `${fmt(r.est.registrados)}/${fmt(r.est.meta)}` : '—';
+  return `
+  <div class="ctl"><label for="umb">Umbral de competencia</label><input type="range" id="umb" min="3" max="20" step="1" value="${Math.round(S.umbral * 100)}"><span class="num" id="umbv">±${Math.round(S.umbral * 100)} pts</span></div>
+  <div class="strat">${cards}</div>
+  <h3>${S.stratF ? STRAT[S.stratF].act + ': top 25' : 'Top 25 por prioridad'} · ${F.short}</h3>
+  <div class="tbl-wrap"><table><thead><tr><th class="l">Secc.</th><th class="l">Municipio</th><th>LN</th><th>% ${F.short}</th><th>Margen</th><th>${head}</th><th>Estructura</th></tr></thead><tbody>
+  ${list.map(r => `<tr data-i="${r.i}"><td class="l num">${CAT.sec[r.i]}</td><td class="l">${titleCase(CAT.munName[CAT.mun[r.i]] || '')}</td><td class="num">${fmt(r.c.ln)}</td><td class="num">${pct(r.c.share)}</td><td class="num">${pts(r.c.mar)}</td><td class="num">${fmt(head === 'Reserva' ? r.mob : r.c.deficit)}</td><td class="num">${estCol(r)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Sin secciones en esta categoría</td></tr>'}
+  </tbody></table></div>
+  <p class="note">Invertir = sección en ventaja o desventaja corta, dentro del tercio de mayor peso en lista nominal del ámbito, cuya estructura registrada va por debajo de 50% de su meta. Prioridad = peso en lista nominal × cercanía al empate. Toca una fila para ver la sección.</p>`;
+}
+const COLS = [
+  {k: 'sec', t: 'Secc.', l: 1, v: r => CAT.sec[r.i], f: v => v},
+  {k: 'mun', t: 'Municipio', l: 1, v: r => CAT.munName[CAT.mun[r.i]] || '', f: v => titleCase(v)},
+  {k: 'ln', t: 'LN', v: r => r.c.ln, f: fmt},
+  {k: 'wln', t: 'Peso LN', v: r => r.wLN, f: v => pct(v, 2)},
+  {k: 'ln26', t: 'LN 26', v: r => r.c.ln26 ?? -1, f: v => v < 0 ? '—' : fmt(v)},
+  {k: 'dln', t: 'Δ LN', v: r => r.c.ln26 != null && r.c.ln ? r.c.ln26 / r.c.ln - 1 : -9, f: v => v === -9 ? '—' : pts(v) + '%'},
+  {k: 'part', t: 'Part.', v: r => r.c.part, f: v => pct(v)},
+  {k: 'share', t: '%', v: r => r.c.share, f: v => pct(v)},
+  {k: 'pos', t: 'Lugar', v: r => r.c.pos, f: v => v + '.º'},
+  {k: 'mar', t: 'Margen', v: r => r.c.mar, f: pts},
+  {k: 'pri', t: 'Prior.', v: r => r.pri, f: v => v.toFixed(2)},
+  {k: 'cob', t: 'Estruct.', v: r => r.cob ?? -1, f: v => v < 0 ? '—' : pct(v, 0)}
+];
+function sortedRows(A) {
+  const col = COLS.find(c => c.k === S.sort.k);
+  return A.rows.slice().sort((a, b) => { const x = col.v(a), y = col.v(b); return (typeof x === 'string' ? x.localeCompare(y) : x - y) * S.sort.dir; });
+}
+function tabRank(A) {
+  if (!A.n) return '<p class="empty">Sin datos para este ámbito.</p>';
+  const rows = sortedRows(A);
+  return `<div class="row-btns"><button class="btn pri" id="dlCsv">Descargar CSV</button><button class="btn" id="copyCsv">Copiar</button><span class="note" style="align-self:center">${A.n} secciones · % y lugar de ${FUERZAS[S.fuerza].short}</span></div>
+  <div class="tbl-wrap"><table><thead><tr>${COLS.map(c => `<th data-k="${c.k}" class="${c.l ? 'l' : ''}" ${S.sort.k === c.k ? `aria-sort="${S.sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</th>`).join('')}</tr></thead><tbody>
+  ${rows.slice(0, S.rankLimit).map(r => `<tr data-i="${r.i}">${COLS.map(c => `<td class="${c.l ? 'l' : ''} ${c.k === 'mun' ? '' : 'num'}">${c.f(c.v(r))}</td>`).join('')}</tr>`).join('')}
+  </tbody></table></div>
+  ${rows.length > S.rankLimit ? `<div class="row-btns"><button class="btn" id="more">Mostrar ${Math.min(100, rows.length - S.rankLimit)} más</button></div>` : ''}`;
+}
+function tabSec() {
+  if (S.sel == null) return '<p class="empty">Toca una sección en el mapa o búscala por número.</p>';
+  const gi = S.sel, d = dataIdx(gi);
+  const tipo = {1: 'Urbana', 2: 'Mixta', 3: 'Rural'}[CAT.tipo[gi]] || '—';
+  const virt = d !== gi;
+  let h = `<div class="kpis">
+    <div class="kpi"><small>Municipio</small><strong>${titleCase(CAT.munName[CAT.mun[gi]] || '')}</strong></div>
+    <div class="kpi"><small>Dto. federal</small><strong class="num">${String(CAT.df[gi]).padStart(2, '0')}</strong></div>
+    <div class="kpi"><small>Dto. local</small><strong class="num">${String(CAT.dl[gi]).padStart(2, '0')}</strong></div></div>
+    <p class="note">Tipo ${tipo}.${virt ? ` <span class="warn">Sección creada después de esta elección: muestra los resultados de su sección de origen ${CAT.sec[d]}, hoy dividida en ${CAT.virtual[CAT.sec[d]].length} secciones.</span>` : ''}</p>`;
+  const c = secCalc(S.elec, d, S.fuerza);
+  if (!c) return h + '<p class="empty">Sin actas contabilizadas para esta elección.</p>';
+  const F = FUERZAS[S.fuerza];
+  h += `<div class="kpis"><div class="kpi"><small>Lista nominal</small><strong class="num">${fmt(c.ln)}</strong></div><div class="kpi"><small>Participación</small><strong class="num">${pct(c.part)}</strong></div><div class="kpi"><small>Abstención</small><strong class="num">${fmt(c.abst)}</strong></div></div>
+  <div class="verdict">${F.short} queda en <strong>${c.pos}.º lugar</strong> con ${pct(c.share)}; margen de <strong class="num">${pts(c.mar)}</strong> pts frente a ${FUERZAS[c.rival.k].short}. Estrategia: <strong>${STRAT[(ambCalc().rows.find(r => r.i === d) || {}).strat2 || c.strat].act}</strong>${c.strat === 'dis' || c.strat === 'adv' ? `, le faltan <span class="num">${fmt(c.deficit)}</span> votos` : ''}.</div>
+  ${LN26 && LN26.ln[gi] != null ? `<div class="kpis"><div class="kpi"><small>LN ${fechaLN()}</small><strong class="num">${fmt(LN26.ln[gi])}</strong></div><div class="kpi"><small>Padrón sin LN</small><strong class="num">${fmt(LN26.pad[gi] - LN26.ln[gi])}</strong></div><div class="kpi"><small>Nacidos fuera</small><strong class="num">${pct(1 - LN26.nacVer[gi] / LN26.ln[gi])}</strong></div></div>${virt ? `<p class="note">Lista nominal vigente de esta sección; los resultados son de toda la sección de origen (${fmt(c.ln26)} electores hoy).</p>` : `<p class="note">Cambio de la lista nominal desde ${RES[S.elec].short}: <span class="num">${pts(LN26.ln[gi] / c.ln - 1)}%</span>.</p>`}` : ''}
+  ${(() => { const es = estOf(d === gi ? gi : gi); return es ? `<h3>Estructura en esta sección</h3><div class="kpis"><div class="kpi"><small>Registrados</small><strong class="num">${fmt(es.registrados)}</strong></div><div class="kpi"><small>Meta</small><strong class="num">${fmt(es.meta)}</strong></div><div class="kpi"><small>Avance</small><strong class="num">${es.meta ? pct(es.registrados / es.meta) : '—'}</strong></div></div><p class="note">${fmt(es.validados)} validados · ${fmt(es.promotores)} promotores · ${fmt(es.comites)} comités</p>` : ''; })()}
+  <h3>${RES[S.elec].name}</h3>${bars(c.opts, c.valid)}
+  ${c.cover < 1 ? `<p class="note warn">Actas contabilizadas: ${RES[S.elec].actas[d]} de ${RES[S.elec].esperadas[d]}. Resultado parcial.</p>` : ''}
+  <h3>Histórico de la sección · % válida</h3>
+  <div class="tbl-wrap"><table class="hist"><thead><tr><th class="l">Elección</th>${['SHH', 'FCV', 'MC'].map(k => `<th>${FUERZAS[k].short}</th>`).join('')}<th>Part.</th></tr></thead><tbody>
+  ${Object.keys(RES).map(e => { const E = RES[e], d = dataIdx(gi, e); if (E.ln[d] == null) return `<tr><td class="l">${E.short}</td><td colspan="4" class="note">sin datos</td></tr>`; const v = E.total[d] - E.nulos[d] - E.nr[d]; return `<tr><td class="l">${E.short}</td>${['SHH', 'FCV', 'MC'].map(k => `<td class="num">${pct(E.blocks[k][d] / v)}</td>`).join('')}<td class="num">${pct(E.total[d] / E.ln[d])}</td></tr>`; }).join('')}
+  </tbody></table></div>`;
+  return h;
+}
+function tabMet() {
+  return `<p class="note"><strong>Fuente.</strong> Bases del PREP por casilla (Gubernatura y Diputaciones locales 2024 y Ayuntamientos 2025 del OPLE Veracruz; Presidencia y Diputaciones federales 2024 del INE) y cartografía electoral del INE para Veracruz. Son resultados preliminares; se sustituirán por cómputos oficiales.</p>
+  <p class="note"><strong>Depuración.</strong> Se usan solo actas contabilizadas. Se excluyen casillas especiales y voto anticipado, que no corresponden a la votación de una sección. Celdas ilegibles cuentan como cero. La lista nominal es la de las actas contabilizadas.</p>
+  <p class="note"><strong>Coaliciones.</strong> Cada fuerza suma los votos de sus partidos y todas sus combinaciones. En diputaciones locales, distritos 04 y 16, PVEM, PT y MORENA compitieron por separado y aquí se suman como bloque. En Ayuntamientos 2025 PVEM y MORENA fueron en coalición en 167 municipios, PT compitió solo y PAN y PRI fueron por separado; se suman como bloques para comparar con 2024.</p>
+  <p class="note"><strong>Reseccionamiento.</strong> 11 secciones que votaron en 2024 hoy están divididas en 76 secciones nuevas; las hijas de 5 de ellas ya votaron con su propio número en 2025. Cuando una sección nueva no tiene votación propia en una elección, muestra el resultado de su sección de origen, que en los totales cuenta una sola vez.</p>
+  <p class="note"><strong>Indicadores.</strong> % sobre votación válida (total − nulos − no registrados). Margen = (fuerza − mejor rival) / válida. Estrategia según margen y umbral: Movilizar (≥ umbral), Reforzar (0 a umbral), Disputar (−umbral a 0), Contener (≤ −umbral). Prioridad = peso en lista nominal × (1 − |margen| / umbral). Votos que faltan = rival − fuerza + 1.</p>
+  <p class="note"><strong>Invertir y estructura.</strong> La clase Invertir se calcula con el avance real de la estructura de tu campaña: sección competida, de peso alto en el ámbito y con menos de 50% de su meta de registros. La meta de cada sección es la lista nominal 2026 × la participación de la elección de referencia × el objetivo de la campaña.</p>
+  ${LN26 ? `<p class="note"><strong>Lista nominal vigente.</strong> INE, datos abiertos de padrón y lista nominal por sección, corte al ${fechaLN(true)}: <span class="num">${fmt(LN26.total)}</span> electores en Veracruz más <span class="num">${fmt(LN26.extranjero)}</span> residentes en el extranjero. Se usa para la reserva movilizable y la capa de crecimiento. Las secciones creadas después de la cartografía se asignaron a su sección de origen; la 1492 (Emiliano Zapata) no aparece en el corte.</p>` : ''}
+  <p class="note"><strong>Versión.</strong> ${APP_VERSION}. El análisis funciona sin conexión con el último avance de estructura descargado.</p>
+  <div class="row-btns"><button class="btn" id="modeBtn">${S.mode === 'bloque' ? 'Ver por partido' : 'Ver por coalición'}</button></div>`;
+}
+
+function bindPanel(A) {
+  $('#pbody').querySelectorAll('tr[data-i]').forEach(tr => tr.onclick = () => selectSec(+tr.dataset.i, true));
+  $('#pbody').querySelectorAll('tr[data-strat]').forEach(tr => tr.onclick = () => { S.tab = 'estr'; S.stratF = tr.dataset.strat; S.capa = 'est'; $('#selCapa').value = 'est'; paint(); render(); });
+  $('#pbody').querySelectorAll('th[data-k]').forEach(th => th.onclick = () => { const k = th.dataset.k; S.sort = {k, dir: S.sort.k === k ? -S.sort.dir : (COLS.find(c => c.k === k).l ? 1 : -1)}; render(); });
+  $('#pbody').querySelectorAll('.sc').forEach(b => b.onclick = () => { S.stratF = S.stratF === b.dataset.sf ? null : b.dataset.sf; render(); });
+  const umb = $('#umb'); if (umb) umb.oninput = () => { S.umbral = umb.value / 100; $('#umbv').textContent = '±' + umb.value + ' pts'; clearTimeout(umb._t); umb._t = setTimeout(() => { paint(); render(); }, 120); };
+  const more = $('#more'); if (more) more.onclick = () => { S.rankLimit += 100; render(); };
+  const mb = $('#modeBtn'); if (mb) mb.onclick = () => { S.mode = S.mode === 'bloque' ? 'partido' : 'bloque'; fillFuerzas(); paint(); render(); };
+  const buildCsv = () => {
+    const rows = sortedRows(A), F = FUERZAS[S.fuerza].short;
+    const csv = ['seccion,municipio,distrito_federal,distrito_local,lista_nominal_2026,lista_nominal,peso_ln,participacion,pct_' + F + ',lugar,margen_pts,estrategia,prioridad']
+      .concat(rows.map(r => [CAT.sec[r.i], '"' + CAT.munName[CAT.mun[r.i]] + '"', CAT.df[r.i], CAT.dl[r.i], r.c.ln26 ?? '', r.c.ln, (r.wLN * 100).toFixed(3), (r.c.part * 100).toFixed(2), (r.c.share * 100).toFixed(2), r.c.pos, (r.c.mar * 100).toFixed(2), STRAT[r.c.strat].act, r.pri.toFixed(3)].join(','))).join('\n');
+    return csv;
+  };
+  const cc = $('#copyCsv'); if (cc) cc.onclick = () => {
+    const csv = buildCsv(), done = () => toast('Tabla copiada. Pégala en Excel.');
+    try { navigator.clipboard.writeText(csv).then(done, () => fallbackCopy(csv, done)); } catch (e) { fallbackCopy(csv, done); }
+  };
+  const dc = $('#dlCsv'); if (dc) dc.onclick = () => {
+    const [k, t] = ambLabel(), name = ['secciones', RES[S.elec].short, k, t, FUERZAS[S.fuerza].short].join('_').normalize('NFD').replace(/[^\w.-]+/g, '_').replace(/_+/g, '_');
+    const url = URL.createObjectURL(new Blob(['\ufeff' + buildCsv()], {type: 'text/csv;charset=utf-8'}));
+    const a = document.createElement('a'); a.href = url; a.download = name + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000); toast('CSV descargado');
+  };
+}
+function fallbackCopy(t, done) { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('No se pudo copiar'); } ta.remove(); }
+function toast(m) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2200); }
+
+// ---------- Selección ----------
+function selectSec(gi, fly) {
+  // gi puede ser índice virtual (de ranking): ubicar la primera hija con geometría
+  if (gi >= CAT.nGeo) { const kids = CAT.virtual[CAT.sec[gi]]; S.selGroup = kids.map(s => CAT.idx[s]); gi = S.selGroup[0]; } else S.selGroup = null;
+  S.sel = gi; S.tab = 'sec';
+  const d = dataIdx(gi);
+  const group = d !== gi ? CAT.virtual[CAT.sec[d]].map(s => CAT.idx[s]) : [gi];
+  MAP.select(group);
+  if (fly) {
+    let b = null; group.forEach(i => { const bb = CAT.bbox[i]; b = b ? [Math.min(b[0], bb[0]), Math.min(b[1], bb[1]), Math.max(b[2], bb[2]), Math.max(b[3], bb[3])] : bb.slice(); });
+    MAP.fit(b, 15);
+  }
+  const p = $('#panel'); if (p.classList.contains('min')) setSheet('');
+  render();
+}
+
+// ---------- Filtros ----------
+function fillFuerzas() {
+  const opts = options(S.elec);
+  if (!opts.includes(S.fuerza)) S.fuerza = opts.includes('SHH') ? 'SHH' : opts.includes('MORENA') ? 'MORENA' : opts[0];
+  $('#selFuerza').innerHTML = opts.map(k => `<option value="${k}">${FUERZAS[k].name}${FUERZAS[k].hint ? ' (' + FUERZAS[k].hint + ')' : ''}</option>`).join('');
+  $('#selFuerza').value = S.fuerza;
+}
+function fillAmb() {
+  const f = $('#fAmb'), s = $('#selAmb');
+  if (S.tipo === 'est') { f.hidden = true; S.amb = null; return; }
+  f.hidden = false;
+  let items;
+  if (S.tipo === 'df') items = Object.keys(CAT.dfName).map(Number).sort((a, b) => a - b).map(k => [k, String(k).padStart(2, '0') + ' ' + CAT.dfName[k]]);
+  else if (S.tipo === 'dl') items = Object.keys(CAT.dlName).map(Number).sort((a, b) => a - b).map(k => [k, String(k).padStart(2, '0') + ' ' + CAT.dlName[k]]);
+  else items = Object.entries(CAT.munName).map(([k, v]) => [+k, titleCase(v)]).sort((a, b) => a[1].localeCompare(b[1], 'es'));
+  s.innerHTML = items.map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  const pref = S.tipo === 'mun' ? 89 : 10; // Xalapa por defecto
+  S.amb = items.some(x => x[0] === pref) ? pref : items[0][0]; s.value = S.amb;
+}
+function fillComp() {
+  const others = Object.keys(RES).filter(e => e !== S.elec);
+  if (!others.includes(S.comp)) S.comp = others[0];
+  $('#selComp').innerHTML = others.map(e => `<option value="${e}">${RES[e].name}</option>`).join('');
+  $('#selComp').value = S.comp;
+}
+function setSheet(state) { const p = $('#panel'); p.classList.remove('min', 'max'); if (state) p.classList.add(state); }
+
+// ---------- Arranque ----------
+// ---------- Plataforma: sesión, campaña y avance de estructura ----------
+const CFG = window.PLATAFORMA_CONFIG;
+const sb = supabase.createClient(CFG.url, CFG.key, {auth: {persistSession: true, autoRefreshToken: true}});
+const ROLES_ANALISIS = ['admin', 'coordinador', 'enlace', 'consulta'];
+let EST = {};
+const lsGet = (k, d) => { try { const v = localStorage.getItem('pc_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem('pc_' + k, JSON.stringify(v)); } catch (e) {} };
+function estOf(i) {
+  const s = CAT.sec[i], kids = CAT.virtual[s];
+  if (kids) { const parts = kids.map(k => EST[k]).filter(Boolean); if (!parts.length) return null; return parts.reduce((a, b) => ({meta: a.meta + b.meta, registrados: a.registrados + b.registrados, validados: a.validados + b.validados, promotores: a.promotores + b.promotores, comites: a.comites + b.comites})); }
+  return EST[s] || null;
+}
+function coberturaGeo(i) { const e = EST[CAT.sec[i]]; return e && e.meta ? e.registrados / e.meta : null; }
+async function sesionCampana() {
+  const {data} = await sb.auth.getSession();
+  if (!data.session) { location.replace('./'); throw new Error('sin sesión'); }
+  let camps = lsGet('campanas', []);
+  try { const r = await sb.rpc('mis_campanas'); if (!r.error && r.data) { camps = r.data; lsSet('campanas', camps); } } catch (e) {}
+  const c = camps.find(x => x.campana_id === lsGet('campana')) || camps[0];
+  if (!c || !ROLES_ANALISIS.includes(c.rol)) { location.replace('./'); throw new Error('sin permiso'); }
+  let camp = lsGet('camp_' + c.campana_id, null);
+  try { const r = await sb.from('campanas').select('*').eq('id', c.campana_id).single(); if (r.data) { camp = r.data; lsSet('camp_' + c.campana_id, camp); } } catch (e) {}
+  let av = lsGet('avance_' + c.campana_id, []);
+  try { const r = await sb.rpc('avance_secciones', {p_campana: c.campana_id}); if (!r.error && r.data) { av = r.data; lsSet('avance_' + c.campana_id, av); } } catch (e) {}
+  EST = Object.fromEntries(av.map(s => [s.seccion, s]));
+  if (camp) {
+    $('#campName').textContent = camp.nombre;
+    const t = {distrito_local: 'dl', distrito_federal: 'df', municipio: 'mun', estado: 'est'}[camp.ambito_tipo] || 'est';
+    S.tipo = t; S.amb = t === 'est' ? null : camp.ambito_clave;
+    S.elec = {dl24: 'DL24', df24: 'DF24', gub24: 'GUB24', pres24: 'PRES24', ayu25: 'AYU25'}[camp.eleccion_referencia] || S.elec;
+    S.capa = 'est';
+  }
+  const f = lsGet('fuerza_analisis'); if (f) S.fuerza = f;
+}
+
+async function boot() {
+  await sesionCampana();
+  const [geo, cat, res] = await Promise.all(['data/geo.json', 'data/catalogo.json', 'data/resultados.json'].map(u => fetch(u).then(r => { if (!r.ok) throw new Error(u); return r.json(); })));
+  CAT = cat; RES = res;
+  try { const r = await fetch('data/ln2026.json'); if (r.ok) LN26 = await r.json(); } catch (e) { LN26 = null; }
+  CAT.idx = Object.fromEntries(CAT.sec.map((s, i) => [s, i]));
+  CAT.parent = CAT.parent || CAT.sec.map(() => null);
+  CAT.virtual = CAT.virtual || {};
+  const sec = topojson.feature(geo, geo.objects.sec);
+  CAT.nGeo = Object.keys(CAT.idx).length - Object.keys(CAT.virtual).length;
+  CAT.bbox = new Array(CAT.sec.length).fill(null);
+  sec.features.forEach(ft => {
+    const i = CAT.idx[ft.properties.seccion]; ft.id = i;
+    let b = [180, 90, -180, -90];
+    const walk = c => { if (typeof c[0] === 'number') { b[0] = Math.min(b[0], c[0]); b[1] = Math.min(b[1], c[1]); b[2] = Math.max(b[2], c[0]); b[3] = Math.max(b[3], c[1]); } else c.forEach(walk); };
+    walk(ft.geometry.coordinates); CAT.bbox[i] = b;
+  });
+  const lines = {type: 'FeatureCollection', features: []};
+  [['df', 'df'], ['dl', 'dl'], ['mun', 'mun']].forEach(([o, tag]) => {
+    const m = topojson.mesh(geo, geo.objects[o], (a, b) => a !== b);
+    lines.features.push({type: 'Feature', properties: {layer: tag}, geometry: m});
+  });
+  const outline = topojson.mesh(geo, geo.objects.mun, (a, b) => a === b);
+  lines.features.push({type: 'Feature', properties: {layer: 'edo'}, geometry: outline});
+
+  ['GUB24', 'DL24', 'DF24'].forEach(e => { if (!RES[e]) delete RES[e]; });
+  $('#selElec').innerHTML = Object.keys(RES).map(e => `<option value="${e}">${RES[e].name}</option>`).join('');
+  $('#selElec').value = S.elec;
+  fillFuerzas(); fillComp();
+  $('#selTipo').value = S.tipo; $('#selCapa').value = S.capa;
+  if (S.tipo !== 'est') { const keep = S.amb; fillAmb(); S.amb = keep; $('#selAmb').value = keep; }
+
+  MAP.init(sec, lines);
+  ready = true; $('#loading').hidden = true;
+  paint(); render(); fitAmb();
+}
+
+// Eventos
+$('#selElec').onchange = e => { S.elec = e.target.value; fillFuerzas(); fillComp(); paint(); render(); };
+$('#selFuerza').onchange = e => { S.fuerza = e.target.value; lsSet('fuerza_analisis', S.fuerza); paint(); render(); };
+$('#selTipo').onchange = e => { S.tipo = e.target.value; fillAmb(); S.rankLimit = 60; paint(); render(); fitAmb(); };
+$('#selAmb').onchange = e => { S.amb = +e.target.value; S.rankLimit = 60; paint(); render(); fitAmb(); };
+$('#selCapa').onchange = e => { S.capa = e.target.value; $('#fComp').hidden = S.capa !== 'swing'; paint(); };
+$('#selComp').onchange = e => { S.comp = e.target.value; paint(); };
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; if ($('#panel').classList.contains('min')) setSheet(''); render(); });
+$('#grab').onclick = () => { const p = $('#panel'); setSheet(p.classList.contains('min') ? '' : p.classList.contains('max') ? 'min' : 'max'); };
+$('#zin').onclick = () => map && map.zoomIn(); $('#zout').onclick = () => map && map.zoomOut(); $('#zfit').onclick = () => S.tipo === 'est' ? MAP.fit(VER_BOX) : fitAmb();
+$('#searchForm').onsubmit = e => {
+  e.preventDefault(); const n = parseInt($('#q').value, 10);
+  if (!CAT || isNaN(n)) return;
+  const i = CAT.idx[n];
+  if (i == null) return toast('La sección ' + n + ' no existe en Veracruz');
+  selectSec(i, true); $('#q').blur();
+};
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeMapPaint);
+new MutationObserver(themeMapPaint).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+boot().catch(err => { if (/sin sesión|sin permiso/.test(err.message)) return; $('#loading').textContent = navigator.onLine ? 'No se pudieron cargar los datos (' + err.message + '). Recarga la página.' : 'Sin conexión. Abre la app una vez con internet para guardarla en el teléfono.'; });
+
+// ---------- App instalable y sin conexión ----------
+const APP_VERSION = CFG.version;
+const offBadge = document.createElement('div'); offBadge.className = 'offline'; offBadge.textContent = 'Sin conexión · datos guardados'; offBadge.hidden = navigator.onLine; offBadge.textContent = 'Sin conexión'; $('.brand').insertBefore(offBadge, $('#searchForm'));
+addEventListener('online', () => offBadge.hidden = true); addEventListener('offline', () => offBadge.hidden = false);
+})();
+</script>
+</body>
+</html>
