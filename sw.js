@@ -1,5 +1,5 @@
 // Plataforma de Campaña: la app abre sin señal. Los datos viven en el servidor y no se guardan aquí.
-const VERSION = '0.2.0';
+const VERSION = '0.2.1';
 const CACHE = 'plataforma-' + VERSION;
 const ASSETS = ['./', 'index.html', 'analisis.html', 'data/catalogo.json', 'data/resultados.json', 'data/ln2026.json', 'app.js', 'config.js', 'manifest.webmanifest',
   'vendor/supabase.js', 'vendor/leaflet.js', 'vendor/leaflet.css', 'vendor/topojson-client.min.js', 'vendor/qrcode.js',

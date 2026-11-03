@@ -151,6 +151,8 @@ tbody tr{cursor:pointer} tbody tr:hover{background:var(--surface-2)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);
   padding:8px 14px;border-radius:8px;z-index:20;font-size:13.5px}
 /* MapLibre: estilos mínimos necesarios */
+.sec-tip{background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;padding:2px 7px;font:600 13px var(--f-num);box-shadow:var(--shadow)}
+.sec-tip::before{display:none}
 .leaflet-container{background:var(--map-bg);font:inherit;-webkit-tap-highlight-color:transparent;outline:0}
 .leaflet-interactive{cursor:pointer}
 .zoomctl{position:absolute;z-index:3;display:flex;flex-direction:column;gap:6px;right:max(12px,env(safe-area-inset-right,0px));top:12px}
@@ -366,6 +368,12 @@ const MAP = {
     if (this.sel) map.removeLayer(this.sel);
     const fc = {type: 'FeatureCollection', features: group.map(i => this.layers[i] && this.layers[i].feature).filter(Boolean)};
     this.sel = L.geoJSON(fc, {renderer: this.renderer, interactive: false, style: {color: cssVar('--accent'), weight: 3, fill: false}}).addTo(map);
+    if (this.selTip) map.removeLayer(this.selTip);
+    if (fc.features.length) {
+      const nums = group.map(i => CAT.sec[i]), b = this.sel.getBounds();
+      this.selTip = L.tooltip({permanent: true, direction: 'center', className: 'sec-tip', interactive: false})
+        .setLatLng(b.getCenter()).setContent(nums.length > 3 ? nums[0] + '…' + nums.at(-1) : nums.join(' · ')).addTo(map);
+    }
   },
   fit(b, maxZoom, animate = true) {
     const p = padding();
@@ -443,7 +451,8 @@ function ambLabel() {
 function fechaLN(full) { if (!LN26) return ''; const [y, m, d] = LN26.fecha.split('-'); const M = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']; return full ? `${+d} de ${M.at(+m - 1)} de ${y}` : `${M.at(+m - 1)} ${y.slice(2)}`; }
 const titleCase = s => s.toLowerCase().replace(/(^|\s)(\p{L})/gu, (m, a, b) => a + b.toUpperCase()).replace(/\b(De|Del|La|Las|Los|Y)\b/g, w => w.toLowerCase());
 function render() {
-  const [k, t] = ambLabel();
+  let [k, t] = ambLabel();
+  if (S.tab === 'sec' && S.sel != null) { k = titleCase(CAT.munName[CAT.mun[S.sel]] || '') + ' · Distrito local ' + String(CAT.dl[S.sel]).padStart(2, '0'); t = 'Sección ' + CAT.sec[S.sel]; }
   $('#kicker').textContent = k + ' · ' + RES[S.elec].name;
   $('#ptitle').textContent = t;
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === S.tab));
@@ -545,7 +554,8 @@ function tabSec() {
   const gi = S.sel, d = dataIdx(gi);
   const tipo = {1: 'Urbana', 2: 'Mixta', 3: 'Rural'}[CAT.tipo[gi]] || '—';
   const virt = d !== gi;
-  let h = `<div class="kpis">
+  let h = `<div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+    <div class="kpi"><small>Sección</small><strong class="num">${CAT.sec[gi]}</strong></div>
     <div class="kpi"><small>Municipio</small><strong>${titleCase(CAT.munName[CAT.mun[gi]] || '')}</strong></div>
     <div class="kpi"><small>Dto. federal</small><strong class="num">${String(CAT.df[gi]).padStart(2, '0')}</strong></div>
     <div class="kpi"><small>Dto. local</small><strong class="num">${String(CAT.dl[gi]).padStart(2, '0')}</strong></div></div>
